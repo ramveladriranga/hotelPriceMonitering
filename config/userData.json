@@ -1,0 +1,9 @@
+{
+  "hotelName": "ibis-delhi-airport",
+  "city": "New Delhi",
+  "dates": [
+    "2025-03-27",
+    "2025-03-28"
+  ],
+  "threshold": 4
+}
