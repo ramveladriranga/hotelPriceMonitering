@@ -1,75 +1,170 @@
-const { chromium } = require('playwright');
-const axios = require('axios');
-const querystring = require('querystring');
+import playwright from 'playwright';
+import ExcelJS from 'exceljs';
+import { excelFilePath, threshold } from '../config/settings.js';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+import { sendWhatsAppAlert } from './alert.js';
 
-const BOT_API_KEY = 'YOUR_TELEGRAM_BOT_API_KEY'; // Replace with your bot API key
-const CHANNEL_NAME = 'YOUR_CHANNEL_NAME'; // Replace with your channel name or chat ID
-const BOOKING_URL = 'https://www.booking.com'; // Base URL
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const videoDir = join(__dirname, 'videos');
+if (!fs.existsSync(videoDir)) {
+    fs.mkdirSync(videoDir, { recursive: true });
+    console.log(`Video directory created: ${videoDir}`);
+}
 
-// Function to create a search URL
-async function createUrl({ people, country, city, date_in, date_out, rooms, score_filter }) {
-    let url = `${BOOKING_URL}/searchresults.en-gb.html?selected_currency=USD&checkin_month=${date_in.getMonth() + 1}&checkin_monthday=${date_in.getDate()}&checkin_year=${date_in.getFullYear()}&checkout_month=${date_out.getMonth() + 1}&checkout_monthday=${date_out.getDate()}&checkout_year=${date_out.getFullYear()}&group_adults=${people}&group_children=0&order=price&ss=${encodeURIComponent(city + ', ' + country)}&no_rooms=${rooms}`;
-
-    if (score_filter) {
-        const scores = { '9+': '90', '8+': '80', '7+': '70', '6+': '60' };
-        if (scores[score_filter]) url += `&nflt=review_score%3D${scores[score_filter]}%3B`;
+function generateDatesForNext6Months() {
+    const dates = [];
+    const currentDate = new Date();
+    for (let i = 0; i < 180; i++) {
+        const checkInDate = new Date(currentDate);
+        checkInDate.setDate(currentDate.getDate() + i);
+        const checkOutDate = new Date(checkInDate);
+        checkOutDate.setDate(checkInDate.getDate() + 1);
+        dates.push({
+            checkIn: checkInDate.toISOString().split('T')[0],
+            checkOut: checkOutDate.toISOString().split('T')[0],
+            displayDate: checkInDate.toLocaleDateString()
+        });
     }
-    return url;
+    return dates;
 }
 
-// Function to scrape hotel data
-async function getHotels(searchParams) {
-    const browser = await chromium.launch();
-    const page = await browser.newPage();
-    const url = await createUrl(searchParams);
+async function scrapeHotelPrices(hotelUrl, hotelName, city) {
+    console.log("Starting hotel price scraping process...");
+    // hotelName = 'Hôtel de la Poste Martigny - City Center';
+    // city = 'Martigny-Ville';
+    //hotelUrl = `https://www.booking.com/searchresults.html?ss=${city}`;
+    hotelUrl = `${hotelUrl}?ss=${city}`;
+    const dates = generateDatesForNext6Months();
 
-    await page.goto(url, { waitUntil: 'load' });
-
-    const hotels = await page.evaluate(() => {
-        return Array.from(document.querySelectorAll(".sr_property_block")).map(hotel => ({
-            name: hotel.querySelector(".sr-hotel__name")?.innerText.trim() || '',
-            score: hotel.querySelector(".bui-review-score__badge")?.innerText.trim() || '',
-            price: hotel.querySelector(".bui-price-display__value")?.innerText.trim() || '',
-            link: hotel.querySelector(".txp-cta a")?.href || ''
-        }));
+    const browser = await playwright.chromium.launch({ headless: true });
+    const context = await browser.newContext({
+        recordVideo: { dir: videoDir },
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.82 Safari/537.36',
     });
+    const page = await context.newPage();
+    await page.setViewportSize({ width: 1280, height: 800 });
 
+    for (const date of dates) {
+        for (let adults = 1; adults <= 4; adults++) {
+            try {
+                const modifiedUrl = `${hotelUrl}&checkin=${date.checkIn}&checkout=${date.checkOut}&group_adults=${adults}`;
+                await page.goto(modifiedUrl, { waitUntil: 'load' });
+                await page.waitForLoadState('networkidle');
+                await page.waitForSelector('[data-testid="property-card"]', { timeout: 10000 });
+                const text = await page.locator('//h1[@aria-live="assertive"]').textContent();
+                const match = text.match(/\d+/);
+                const maxHotels = match ? parseInt(match[0], 10) : 0;
+                const hotelData = await page.evaluate((maxHotels) => {
+                    return Array.from(document.querySelectorAll('[data-testid="property-card"]'))
+                        .slice(0, maxHotels) // Dynamically limit hotels based on extracted number
+                        .map(card => {
+                            const nameElement = card.querySelector('[data-testid="title"]');
+                            const priceElement = card.querySelector('[data-testid="price-and-discounted-price"]');
+                            return {
+                                name: nameElement ? nameElement.innerText.trim() : 'Unknown',
+                                price: priceElement ? parseFloat(priceElement.innerText.replace(/[^0-9.]/g, '')) : null
+                            };
+                        }).filter(hotel => hotel.price !== null);
+                }, maxHotels);
+
+                if (!hotelData.length) continue;
+
+                const myHotel = hotelData.find(h => h.name.includes(hotelName));
+                const competitorPrices = hotelData.filter(h => h.name !== hotelName).map(h => h.price);
+
+                if (!myHotel || competitorPrices.length === 0) continue;
+
+                const myHotelPrice = myHotel.price;
+                const minCompetitorPrice = Math.min(...competitorPrices);
+                let alertMessage = '';
+                // ✅ Check if this date is today
+                const isToday = new Date(date.checkIn).toDateString() === new Date().toDateString();
+
+                if (myHotelPrice > minCompetitorPrice) {
+                    alertMessage = `⛔️ Competitor is cheaper on ${date.displayDate} for ${adults} adults.`;
+                    console.log(alertMessage);
+                    if (isToday) await sendWhatsAppAlert(alertMessage);
+                } else if (myHotelPrice < minCompetitorPrice - threshold) {
+                    alertMessage = `⚠️ You are cheaper by more than the threshold (${threshold}) on ${date.displayDate} for ${adults} adults.`;
+                    console.log(alertMessage);
+                    if (isToday) await sendWhatsAppAlert(alertMessage);
+                }
+
+                await saveToExcel(hotelName, city, myHotelPrice, minCompetitorPrice, date.checkIn, date.checkOut, adults, alertMessage);
+            } catch (error) {
+                console.error(`Error processing Check-in ${date.checkIn} for ${adults} adults:`, error.message);
+            }
+        }
+    }
     await browser.close();
-    return hotels;
+    console.log("Scraping process completed.");
 }
 
-// Function to send a message using Telegram
-async function sendMessage(text) {
-    const url = `https://api.telegram.org/bot${BOT_API_KEY}/sendMessage?parse_mode=HTML&chat_id=${CHANNEL_NAME}&text=${querystring.escape(text)}`;
-    await axios.get(url);
-}
-
-// Main function to notify users with search results
-async function notifyHotels(searchParams) {
+// Make sure to load the Excel workbook outside the loop and save it only once after adding rows
+async function saveToExcel(hotelName, city, myPrice, competitorPrice, checkInDate, checkOutDate, adults, alert) {
     try {
-        const hotels = await getHotels(searchParams);
+        const workbook = new ExcelJS.Workbook();
+        const excelDir = join(excelFilePath, '..');
 
-        await sendMessage(`Here are your search results for ${searchParams.people} people, ${searchParams.rooms} rooms in ${searchParams.city}, ${searchParams.country} from ${searchParams.date_in.toDateString()} to ${searchParams.date_out.toDateString()} with a ${searchParams.score_filter || 'any'} rating.`);
-
-        for (const hotel of hotels) {
-            await sendMessage(`<a href="${hotel.link}">${hotel.name}</a> (${hotel.score})\nTotal price: ${hotel.price}`);
+        // Ensure the directory exists
+        if (!fs.existsSync(excelDir)) {
+            fs.mkdirSync(excelDir, { recursive: true });
         }
 
-        console.log("Notifications sent successfully.");
+        const today = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+        const sheetName = `Prices_${today}`;
+        let sheet;
+
+        try {
+            // Try reading the existing Excel file
+            await workbook.xlsx.readFile(excelFilePath);
+            sheet = workbook.getWorksheet(sheetName);
+
+            if (!sheet) {
+                // Create a new sheet if it doesn't exist
+                sheet = workbook.addWorksheet(sheetName);
+                sheet.columns = [
+                    { header: 'Hotel Name', key: 'hotelName', width: 30 },
+                    { header: 'City', key: 'city', width: 20 },
+                    { header: 'My Price', key: 'myPrice', width: 15 },
+                    { header: 'Competitor Min Price', key: 'competitorPrice', width: 20 },
+                    { header: 'Check-In Date', key: 'checkInDate', width: 20 },
+                    { header: 'Check-Out Date', key: 'checkOutDate', width: 20 },
+                    { header: 'Adults', key: 'adults', width: 10 },
+                    { header: 'Alert', key: 'alert', width: 50 },
+                ];
+            }
+        } catch (error) {
+            // If file doesn't exist, create a new workbook and sheet
+            sheet = workbook.addWorksheet(sheetName);
+            sheet.columns = [
+                { header: 'Hotel Name', key: 'hotelName', width: 30 },
+                { header: 'City', key: 'city', width: 20 },
+                { header: 'My Price', key: 'myPrice', width: 15 },
+                { header: 'Competitor Min Price', key: 'competitorPrice', width: 20 },
+                { header: 'Check-In Date', key: 'checkInDate', width: 20 },
+                { header: 'Check-Out Date', key: 'checkOutDate', width: 20 },
+                { header: 'Adults', key: 'adults', width: 10 },
+                { header: 'Alert', key: 'alert', width: 50 },
+            ];
+        }
+
+        // Get the next available row (start from 2 to keep headers intact)
+        const nextRow = sheet.rowCount + 1;
+
+        // Append new row at the correct position
+        sheet.getRow(nextRow).values = [hotelName, city, myPrice, competitorPrice, checkInDate, checkOutDate, adults, alert];
+
+        // Save the updated workbook to the file
+        await workbook.xlsx.writeFile(excelFilePath);
     } catch (error) {
-        console.error("Error in notifying hotels:", error.message);
+        console.error(`Error saving data to Excel: ${error.message}`);
     }
 }
 
-// Example usage
-const searchParams = {
-    people: 2,
-    country: 'India',
-    city: 'Hyderabad',
-    date_in: new Date('2025-04-01'),
-    date_out: new Date('2025-04-05'),
-    rooms: 1,
-    score_filter: '8+'
-};
 
-notifyHotels(searchParams);
+
+scrapeHotelPrices();
+export { scrapeHotelPrices };

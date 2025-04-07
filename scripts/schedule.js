@@ -1,32 +1,27 @@
-// const cron = require('node-cron');
-// const { scrapeHotelPrices } = require('../controllers/scraper');
-// const { runScraper } = require('../controllers/scraper');
-// // cron.schedule('0 21 * * *', () => {
-// //   console.log('Running scheduled scrape at 9 PM...');
-// //   scrapeHotelPrices('https://example.com/hotel', 'My Hotel', 'New York');
-// // });
+import cron from 'node-cron';
+import { exec } from 'child_process';
+import path from 'path';
 
-// console.log('Running scraper now...');
-// runScraper()
-//   .then(() => {
-//     console.log('✅ Scraper finished running.');
-//   })
-//   .catch(error => {
-//     console.error('❗ Error during scraping:', error);
-//   });
+const scriptPath = path.resolve('./scripts/scheduled-runner.js');
 
-const { scrapeHotelPrices } = require('../controllers/scraper');
+// Schedule to run at 9:00 AM, 3:00 PM, and 9:00 PM every day
+//const schedule = ['0 1 * * *', '0 7 * * *', '0 13 * * *','0 19 * * *'];
 
-// Example values for testing (you can adjust these)
-const hotelUrl = 'https://www.booking.com/hotel/in/ibis-delhi-airport.html'; 
-const hotelName = 'ibis-delhi-airport';
-const city = 'New Delhi';
+const schedule = ['21 8-23 * * *'];
 
-console.log('Running scraper now...');
-scrapeHotelPrices(hotelUrl, hotelName, city)
-  .then(() => {
-    console.log('✅ Scraper finished running.');
-  })
-  .catch(error => {
-    console.error('❗ Error during scraping:', error);
+schedule.forEach(cronTime => {
+  cron.schedule(cronTime, () => {
+    console.log(`🕘 Running scheduled-runner.js at ${new Date().toLocaleString()} (${cronTime})`);
+
+    exec(`node ${scriptPath}`, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`❗ Error executing script: ${error.message}`);
+        return;
+      }
+      if (stderr) {
+        console.error(`⚠️ stderr: ${stderr}`);
+      }
+      console.log(`📜 stdout:\n${stdout}`);
+    });
   });
+});

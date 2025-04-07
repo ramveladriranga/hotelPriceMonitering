@@ -1,10 +1,9 @@
 import playwright from 'playwright';
 import ExcelJS from 'exceljs';
-import { excelFilePath} from '../config/settings.js';
+import { excelFilePath, threshold } from '../config/settings.js';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
-import { sendWhatsAppAlert } from './alert.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const videoDir = join(__dirname, 'videos');
@@ -30,14 +29,23 @@ function generateDatesForNext6Months() {
     return dates;
 }
 
-async function scrapeHotelPrices(hotelUrl, hotelName, city, threshold) {
+async function withRetry(fn, retries = 3, delay = 3000) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            return await fn();
+        } catch (error) {
+            if (attempt === retries) throw error;
+            //console.warn(`Attempt ${attempt} failed. Retrying in ${delay}ms...`);
+            await new Promise(res => setTimeout(res, delay));
+        }
+    }
+}
+
+async function scrapeHotelPrices(hotelUrl, hotelName, city) {
     console.log("Starting hotel price scraping process...");
-    // hotelName = 'Hôtel de la Poste Martigny - City Center';
-    // city = 'Martigny-Ville';
-    // hotelUrl = `https://www.booking.com/searchresults.html?ss=${city}`;
-    console.log(`Scraping URL: ${threshold}`);
-    hotelUrl = `${hotelUrl}?ss=${city}`;
-    console.log(`Scraping URL: ${hotelUrl}`);
+    hotelName = 'Hôtel de la Poste Martigny - City Center';
+    city = 'Martigny-Ville';
+    hotelUrl = `https://www.booking.com/searchresults.html?ss=${city}`;
     const dates = generateDatesForNext6Months();
 
     const browser = await playwright.chromium.launch({ headless: true });
@@ -47,21 +55,24 @@ async function scrapeHotelPrices(hotelUrl, hotelName, city, threshold) {
     });
     const page = await context.newPage();
     await page.setViewportSize({ width: 1280, height: 800 });
-
+    let i=0;
     for (const date of dates) {
         for (let adults = 1; adults <= 4; adults++) {
             try {
                 const modifiedUrl = `${hotelUrl}&checkin=${date.checkIn}&checkout=${date.checkOut}&group_adults=${adults}`;
-                console.log(`Modified URL: ${modifiedUrl}`);
-                await page.goto(modifiedUrl, { waitUntil: 'load' });
-                await page.waitForLoadState('networkidle');
-                await page.waitForSelector('[data-testid="property-card"]', { timeout: 10000 });
+
+                await withRetry(async () => {
+                    await page.goto(modifiedUrl, { waitUntil: 'load' });
+                    await page.waitForLoadState('networkidle');
+                    await page.waitForSelector('[data-testid="property-card"]', { timeout: 10000 });
+                });
+
                 const text = await page.locator('//h1[@aria-live="assertive"]').textContent();
                 const match = text.match(/\d+/);
                 const maxHotels = match ? parseInt(match[0], 10) : 0;
                 const hotelData = await page.evaluate((maxHotels) => {
                     return Array.from(document.querySelectorAll('[data-testid="property-card"]'))
-                        .slice(0, maxHotels) // Dynamically limit hotels based on extracted number
+                        .slice(0, maxHotels)
                         .map(card => {
                             const nameElement = card.querySelector('[data-testid="title"]');
                             const priceElement = card.querySelector('[data-testid="price-and-discounted-price"]');
@@ -81,18 +92,14 @@ async function scrapeHotelPrices(hotelUrl, hotelName, city, threshold) {
 
                 const myHotelPrice = myHotel.price;
                 const minCompetitorPrice = Math.min(...competitorPrices);
-                let alertMessage = '';
-                // ✅ Check if this date is today
-                const isToday = new Date(date.checkIn).toDateString() === new Date().toDateString();
-
+                let alertMessage = '';                
+                i=i+1;
                 if (myHotelPrice > minCompetitorPrice) {
                     alertMessage = `⛔️ Competitor is cheaper on ${date.displayDate} for ${adults} adults.`;
-                    console.log(alertMessage);
-                    if (isToday) await sendWhatsAppAlert(alertMessage);
+                    console.log(`${i}::${alertMessage}`);
                 } else if (myHotelPrice < minCompetitorPrice - threshold) {
                     alertMessage = `⚠️ You are cheaper by more than the threshold (${threshold}) on ${date.displayDate} for ${adults} adults.`;
-                    console.log(alertMessage);
-                    if (isToday) await sendWhatsAppAlert(alertMessage);
+                    console.log(`${i}::${alertMessage}`);
                 }
 
                 await saveToExcel(hotelName, city, myHotelPrice, minCompetitorPrice, date.checkIn, date.checkOut, adults, alertMessage);
@@ -105,28 +112,22 @@ async function scrapeHotelPrices(hotelUrl, hotelName, city, threshold) {
     console.log("Scraping process completed.");
 }
 
-// Make sure to load the Excel workbook outside the loop and save it only once after adding rows
 async function saveToExcel(hotelName, city, myPrice, competitorPrice, checkInDate, checkOutDate, adults, alert) {
     try {
         const workbook = new ExcelJS.Workbook();
         const excelDir = join(excelFilePath, '..');
-
-        // Ensure the directory exists
         if (!fs.existsSync(excelDir)) {
             fs.mkdirSync(excelDir, { recursive: true });
         }
 
-        const today = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+        const today = new Date().toISOString().split('T')[0];
         const sheetName = `Prices_${today}`;
         let sheet;
 
         try {
-            // Try reading the existing Excel file
             await workbook.xlsx.readFile(excelFilePath);
             sheet = workbook.getWorksheet(sheetName);
-
             if (!sheet) {
-                // Create a new sheet if it doesn't exist
                 sheet = workbook.addWorksheet(sheetName);
                 sheet.columns = [
                     { header: 'Hotel Name', key: 'hotelName', width: 30 },
@@ -140,7 +141,6 @@ async function saveToExcel(hotelName, city, myPrice, competitorPrice, checkInDat
                 ];
             }
         } catch (error) {
-            // If file doesn't exist, create a new workbook and sheet
             sheet = workbook.addWorksheet(sheetName);
             sheet.columns = [
                 { header: 'Hotel Name', key: 'hotelName', width: 30 },
@@ -154,20 +154,11 @@ async function saveToExcel(hotelName, city, myPrice, competitorPrice, checkInDat
             ];
         }
 
-        // Get the next available row (start from 2 to keep headers intact)
-        const nextRow = sheet.rowCount + 1;
-
-        // Append new row at the correct position
-        sheet.getRow(nextRow).values = [hotelName, city, myPrice, competitorPrice, checkInDate, checkOutDate, adults, alert];
-
-        // Save the updated workbook to the file
+        sheet.addRow({ hotelName, city, myPrice, competitorPrice, checkInDate, checkOutDate, adults, alert });
         await workbook.xlsx.writeFile(excelFilePath);
     } catch (error) {
         console.error(`Error saving data to Excel: ${error.message}`);
     }
 }
-
-
-
-//scrapeHotelPrices();
+scrapeHotelPrices();
 export { scrapeHotelPrices };

@@ -1,9 +1,12 @@
-{
-  "hotelName": "ibis-delhi-airport",
-  "city": "New Delhi",
-  "dates": [
-    "2025-03-27",
-    "2025-03-28"
-  ],
-  "threshold": 4
-}
+[
+  {
+    "hotelUrl": "https://www.booking.com/searchresults.html",
+    "hotelName": "Hôtel de la Poste Martigny - City Center",
+    "city": "Martigny-Ville"
+  },
+  {
+    "hotelUrl": "https://www.booking.com/searchresults.html",
+    "hotelName": "MEININGER Hotel Zürich Greencity",
+    "city": "Zurich"
+  }
+]
