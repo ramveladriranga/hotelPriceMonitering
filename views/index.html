@@ -2,6 +2,28 @@
 <html>
 <head>
   <link rel="stylesheet" href="/css/style.css">
+  <style>
+    #response {
+      margin-top: 20px;
+      padding: 10px;
+      border-radius: 5px;
+      display: none;
+    }
+    .success {
+      background-color: #dff0d8;
+      color: #3c763d;
+      border: 1px solid #3c763d;
+    }
+    .error {
+      background-color: #f2dede;
+      color: #a94442;
+      border: 1px solid #a94442;
+    }
+    .loading {
+      color: #31708f;
+      font-style: italic;
+    }
+  </style>
 </head>
 <body>
   <h1>Hotel Price Monitoring</h1>
@@ -9,7 +31,7 @@
     <label for="hotelName">Hotel Name:</label>
     <input type="text" id="hotelName" name="hotelName" required><br>
     
-    <label for="hotelUrl">Hotel URL:</label> <!-- Changed to hotelUrl -->
+    <label for="hotelUrl">Hotel URL:</label>
     <input type="text" id="hotelUrl" name="hotelUrl" required><br>
     
     <label for="city">City:</label>
@@ -17,8 +39,6 @@
 
     <label for="ExcludedHotels">Hotels Exclude:</label>
     <input type="text" id="ExcludedHotels" name="ExcludedHotels"><br>
-    <!-- <label for="dates">Dates (comma separated, e.g., 2025-03-27,2025-03-28):</label>
-    <input type="text" id="dates" name="dates" required><br> -->
     
     <label for="threshold">Threshold:</label>
     <input type="number" id="threshold" name="threshold" required><br>
@@ -31,32 +51,81 @@
   <script>
     document.getElementById('hotelForm').addEventListener('submit', async function(e) {
       e.preventDefault();
-    
+      console.log("📢 Form submitted");
+
+      const responseDiv = document.getElementById('response');
+      const submitButton = document.querySelector('button[type="submit"]');
+
+      // Show initial message when button is clicked
+      responseDiv.style.display = 'block';
+      responseDiv.className = 'loading';
+      responseDiv.innerText = 'Your request has been submitted';
+      submitButton.disabled = true;
+
       const data = {
         hotelName: document.getElementById('hotelName').value,
         hotelUrl: document.getElementById('hotelUrl').value,
-        city: document.getElementById('city').value,        
+        city: document.getElementById('city').value,
         threshold: document.getElementById('threshold').value,
         excludedHotels: document.getElementById('ExcludedHotels').value.split(',').map(h => h.trim())
       };
-    
-      console.log("📤 Sending Data to Server:", data);
-    
+
+      console.log("📤 Sending Data:", data);
+
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10-second timeout
+
         const response = await fetch('/api/scrape', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
+          body: JSON.stringify(data),
+          signal: controller.signal
         });
-    
-        const result = await response.json();
-        console.log("📥 Server Response:", result);
-        document.getElementById('response').innerText = result.message || result.error;
+
+        clearTimeout(timeoutId);
+        console.log("📥 Response Status:", response.status);
+
+        let result;
+        try {
+          result = await response.json();
+          console.log("📥 Parsed Response:", result);
+        } catch (jsonError) {
+          console.error("❗ JSON Parse Error:", jsonError);
+          throw new Error('Invalid response from server');
+        }
+
+        // Update message with server response
+        responseDiv.style.display = 'block';
+        if (response.ok && result.message) {
+          responseDiv.className = 'success';
+          responseDiv.innerText = result.message;
+        } else {
+          responseDiv.className = 'error';
+          responseDiv.innerText = result.error || 'Failed to process request';
+        }
+
+        // Clear message after 5 seconds
+        setTimeout(() => {
+          responseDiv.style.display = 'none';
+          responseDiv.innerText = '';
+        }, 5000);
       } catch (error) {
-        console.error("❗ Error:", error);
+        console.error("❗ Fetch Error:", error);
+        responseDiv.style.display = 'block';
+        responseDiv.className = 'error';
+        responseDiv.innerText = 'Error: Request timed out or server unavailable. Please try again.';
+        
+        // Clear message after 5 seconds
+        setTimeout(() => {
+          responseDiv.style.display = 'none';
+          responseDiv.innerText = '';
+        }, 5000);
+      } finally {
+        clearTimeout(timeoutId);
+        submitButton.disabled = false;
       }
     });
-    </script>
-    
+  </script>
 </body>
 </html>
