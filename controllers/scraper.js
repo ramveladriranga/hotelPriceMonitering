@@ -99,7 +99,7 @@ async function scrapeHotelPrices(hotelUrl, hotelName, city, threshold, excludedH
                     if (isToday) await sendWhatsAppAlert(alertMessage);
                 }
 
-                await saveToExcel(hotelName, city, myHotelPrice, minCompetitorPrice, date.checkIn, date.checkOut, adults, alertMessage);
+                await saveToExcel(hotelName, city, myHotelPrice, minCompetitorPrice, date.checkIn, date.checkOut, adults, alertMessage, excludedHotels);
             } catch (error) {
                 console.error(`Error processing Check-in ${date.checkIn} for ${adults} adults:`, error.message);
             }
@@ -110,7 +110,7 @@ async function scrapeHotelPrices(hotelUrl, hotelName, city, threshold, excludedH
 }
 
 // Make sure to load the Excel workbook outside the loop and save it only once after adding rows
-async function saveToExcel(hotelName, city, myPrice, competitorPrice, checkInDate, checkOutDate, adults, alert) {
+async function saveToExcel(hotelName, city, myPrice, competitorPrice, checkInDate, checkOutDate, adults, alert, excludedHotels) {
     try {
         const workbook = new ExcelJS.Workbook();
         const excelDir = join(excelFilePath, '..');
@@ -139,8 +139,9 @@ async function saveToExcel(hotelName, city, myPrice, competitorPrice, checkInDat
                     { header: 'Competitor Min Price', key: 'competitorPrice', width: 20 },
                     { header: 'Check-In Date', key: 'checkInDate', width: 20 },
                     { header: 'Check-Out Date', key: 'checkOutDate', width: 20 },
-                    { header: 'Adults', key: 'adults', width: 10 },
+                    { header: 'Adults', key: 'adults', width: 10 },                    
                     { header: 'Alert', key: 'alert', width: 50 },
+                    { header: 'Excluded Hotels', key: 'excludedHotels', width: 50 },
                 ];
             }
         } catch (error) {
@@ -155,6 +156,7 @@ async function saveToExcel(hotelName, city, myPrice, competitorPrice, checkInDat
                 { header: 'Check-Out Date', key: 'checkOutDate', width: 20 },
                 { header: 'Adults', key: 'adults', width: 10 },
                 { header: 'Alert', key: 'alert', width: 50 },
+                { header: 'Excluded Hotels', key: 'excludedHotels', width: 50 },
             ];
         }
 
@@ -162,7 +164,7 @@ async function saveToExcel(hotelName, city, myPrice, competitorPrice, checkInDat
         const nextRow = sheet.rowCount + 1;
 
         // Append new row at the correct position
-        sheet.getRow(nextRow).values = [hotelName, city, myPrice, competitorPrice, checkInDate, checkOutDate, adults, alert];
+        sheet.getRow(nextRow).values = [hotelName, city, myPrice, competitorPrice, checkInDate, checkOutDate, adults, alert, excludedHotels];
 
         // Save the updated workbook to the file
         await workbook.xlsx.writeFile(excelFilePath);
