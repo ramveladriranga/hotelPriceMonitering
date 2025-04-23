@@ -9,8 +9,8 @@ router.get('/', (req, res) => {
 });
 
 router.post('/submit', (req, res) => {
-  const { hotelName, city, dates, threshold } = req.body;
-  const userData = { hotelName, city, dates: dates.split(','), threshold: parseFloat(threshold) };
+  const { hotelName, city, dates, threshold, excludedHotels } = req.body;
+  const userData = { hotelName, city, dates: dates.split(','), threshold: parseFloat(threshold), excludedHotels: excludedHotels.split(',') };
   fs.writeFileSync('./config/userData.json', JSON.stringify(userData, null, 2));
   res.send('Data submitted successfully!');
 });

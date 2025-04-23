@@ -30,7 +30,7 @@ function generateDatesForNext6Months() {
     return dates;
 }
 
-async function scrapeHotelPrices(hotelUrl, hotelName, city, threshold) {
+async function scrapeHotelPrices(hotelUrl, hotelName, city, threshold, excludedHotels) {
     console.log("Starting hotel price scraping process...");
     // hotelName = 'Hôtel de la Poste Martigny - City Center';
     // city = 'Martigny-Ville';
@@ -73,9 +73,13 @@ async function scrapeHotelPrices(hotelUrl, hotelName, city, threshold) {
                 }, maxHotels);
 
                 if (!hotelData.length) continue;
-
+                const excludeList = excludedHotels.map(h => h.trim().toLowerCase());
                 const myHotel = hotelData.find(h => h.name.includes(hotelName));
-                const competitorPrices = hotelData.filter(h => h.name !== hotelName).map(h => h.price);
+                const validCompetitors = hotelData.filter(h =>
+                    h.name !== hotelName &&
+                    !excludeList.includes(h.name.toLowerCase())
+                );
+                const competitorPrices = validCompetitors.map(h => h.price);
 
                 if (!myHotel || competitorPrices.length === 0) continue;
 

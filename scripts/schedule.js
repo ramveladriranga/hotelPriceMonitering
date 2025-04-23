@@ -5,9 +5,9 @@ import path from 'path';
 const scriptPath = path.resolve('./scripts/scheduled-runner.js');
 
 // Schedule to run at 9:00 AM, 3:00 PM, and 9:00 PM every day
-//const schedule = ['0 1 * * *', '0 7 * * *', '0 13 * * *','0 19 * * *'];
+const schedule = ['0 9 * * *', '0 15 * * *', '0 21 * * *'];
 
-const schedule = ['21 8-23 * * *'];
+//const schedule = ['5 0-23 * * *'];
 
 schedule.forEach(cronTime => {
   cron.schedule(cronTime, () => {

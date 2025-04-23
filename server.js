@@ -27,7 +27,7 @@ app.get('/', (req, res) => {
 app.post('/api/scrape', async (req, res) => {
   console.log("🔥 Received UI Input:", req.body);  // Check if UI sends data
 
-  const { hotelUrl, hotelName, city, dates, threshold } = req.body;
+  const { hotelUrl, hotelName, city, dates, threshold, excludedHotels } = req.body;
 
   if (!hotelUrl || !hotelName || !city || !threshold) {
     console.error("❌ Missing Fields:", req.body);
@@ -37,7 +37,7 @@ app.post('/api/scrape', async (req, res) => {
   console.log(`🚀 Starting the scraper for ${hotelName} in ${city}`);
 
   try {
-    await scrapeHotelPrices(hotelUrl, hotelName, city, threshold);
+    await scrapeHotelPrices(hotelUrl, hotelName, city, threshold, excludedHotels);
     res.status(200).json({ message: 'Scraping completed successfully.' });
   } catch (error) {
     console.error('❗ Error during scraping:', error);

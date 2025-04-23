@@ -14,7 +14,9 @@
     
     <label for="city">City:</label>
     <input type="text" id="city" name="city" required><br>
-    
+
+    <label for="ExcludedHotels">Hotels Exclude:</label>
+    <input type="text" id="ExcludedHotels" name="ExcludedHotels"><br>
     <!-- <label for="dates">Dates (comma separated, e.g., 2025-03-27,2025-03-28):</label>
     <input type="text" id="dates" name="dates" required><br> -->
     
@@ -34,7 +36,8 @@
         hotelName: document.getElementById('hotelName').value,
         hotelUrl: document.getElementById('hotelUrl').value,
         city: document.getElementById('city').value,        
-        threshold: document.getElementById('threshold').value
+        threshold: document.getElementById('threshold').value,
+        excludedHotels: document.getElementById('ExcludedHotels').value.split(',').map(h => h.trim())
       };
     
       console.log("📤 Sending Data to Server:", data);
