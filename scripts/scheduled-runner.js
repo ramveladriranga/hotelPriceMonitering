@@ -14,7 +14,7 @@ async function runScheduledScraping() {
   for (const hotel of data) {
     try {
       console.log(`⏳ Running for: ${hotel.hotelName}`);
-      await scrapeHotelPrices(hotel.hotelUrl, hotel.hotelName, hotel.city);
+      await scrapeHotelPrices(hotel.hotelUrl, hotel.hotelName, hotel.city, hotel.excludedHotels);
     } catch (err) {
       console.error(`❌ Failed: ${hotel.hotelName}`, err.message);
     }

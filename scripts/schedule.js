@@ -1,27 +1,35 @@
 import cron from 'node-cron';
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
-const scriptPath = path.resolve('./scripts/scheduled-runner.js');
+// Needed because you are using ES modules (no __dirname natively)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// Schedule to run at 9:00 AM, 3:00 PM, and 9:00 PM every day
-const schedule = ['0 9 * * *', '0 15 * * *', '0 21 * * *'];
+// Correct path to your scheduled-runner.js
+const scriptPath = path.join(__dirname, 'scheduled-runner.js');
 
-//const schedule = ['5 0-23 * * *'];
+// Your cron timings
+//const schedule = ['0 9 * * *', '0 15 * * *', '0 21 * * *'];
+const schedule = ['18 0-23 * * *']; // Every hour at 49th minute
 
+// Setting up each cron job
 schedule.forEach(cronTime => {
   cron.schedule(cronTime, () => {
     console.log(`🕘 Running scheduled-runner.js at ${new Date().toLocaleString()} (${cronTime})`);
 
-    exec(`node ${scriptPath}`, (error, stdout, stderr) => {
-      if (error) {
-        console.error(`❗ Error executing script: ${error.message}`);
-        return;
-      }
-      if (stderr) {
-        console.error(`⚠️ stderr: ${stderr}`);
-      }
-      console.log(`📜 stdout:\n${stdout}`);
+    // Now spawn a new process to run scheduled-runner.js
+    const child = spawn(process.execPath, [scriptPath], {
+      stdio: 'inherit', // SUPER important so you SEE the child process logs
+    });
+
+    child.on('error', (error) => {
+      console.error(`❗ Error spawning script: ${error.message}`);
+    });
+
+    child.on('exit', (code) => {
+      console.log(`✅ scheduled-runner.js exited with code ${code}`);
     });
   });
 });

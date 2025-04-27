@@ -49,7 +49,7 @@ async function scrapeHotelPrices(hotelUrl, hotelName, city, excludedHotels) {
     for (const date of dates) {
         for (let adults = 1; adults <= 4; adults++) {
             try {
-                const modifiedUrl = `${hotelUrl}&checkin=${date.checkIn}&checkout=${date.checkOut}&group_adults=${adults}`;
+                const modifiedUrl = `https://www.booking.com/searchresults.html?dest_id=-${city}&dest_type=city&checkin=${date.checkIn}&checkout=${date.checkOut}&group_adults=${adults}`;
                 await page.goto(modifiedUrl, { waitUntil: 'load' });
                 await page.waitForLoadState('networkidle');
                 await page.waitForSelector('[data-testid="property-card"]', { timeout: 10000 });
@@ -173,5 +173,5 @@ async function saveToExcel(hotelName, city, myPrice, competitorPrice, checkInDat
 
 
 
-scrapeHotelPrices();
+//scrapeHotelPrices();
 export { scrapeHotelPrices };

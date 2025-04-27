@@ -1,12 +1,35 @@
 [
   {
-    "hotelUrl": "https://www.booking.com/searchresults.html",
-    "hotelName": "Hôtel de la Poste Martigny - City Center",
-    "city": "Martigny-Ville"
-  },
+  "hotelName": "Hôtel de la Poste Martigny - City Center",
+  "hotelUrl": "https://www.booking.com/searchresults.html",
+  "city": "2553058",
+  "threshold": "5",
+  "excludedHotels": [
+  "Motel des Sports Martigny",
+  "Hotel du Stand",
+  "Martigny Youth Hostel"
+  ]
+},
   {
-    "hotelUrl": "https://www.booking.com/searchresults.html",
-    "hotelName": "MEININGER Hotel Zürich Greencity",
-    "city": "Zurich"
-  }
+  "hotelName": "Motel des Sports Martigny",
+  "hotelUrl": "https://www.booking.com/searchresults.html",
+  "city": "2553058",
+  "threshold": "5",
+  "excludedHotels": [
+  "Hôtel de la Poste Martigny - City Center",
+  "Hotel du Stand",
+  "Martigny Youth Hostel"
+  ]
+},
+  {
+  "hotelName": "Hotel des Alpes Bulle center",
+  "hotelUrl": "https://www.booking.com/searchresults.html",
+  "city": "2551451",
+  "threshold": "5",
+  "excludedHotels": [
+  "Motel des Sports Martigny",
+  "Hotel du Stand",
+  "Martigny Youth Hostel"
+  ]
+}
 ]

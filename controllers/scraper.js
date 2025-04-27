@@ -51,7 +51,7 @@ async function scrapeHotelPrices(hotelUrl, hotelName, city, threshold, excludedH
     for (const date of dates) {
         for (let adults = 1; adults <= 4; adults++) {
             try {
-                const modifiedUrl = `${hotelUrl}&checkin=${date.checkIn}&checkout=${date.checkOut}&group_adults=${adults}`;
+                const modifiedUrl = `https://www.booking.com/searchresults.html?dest_id=-${city}&dest_type=city&checkin=${date.checkIn}&checkout=${date.checkOut}&group_adults=${adults}`;
                 console.log(`Modified URL: ${modifiedUrl}`);
                 await page.goto(modifiedUrl, { waitUntil: 'load' });
                 await page.waitForLoadState('networkidle');
